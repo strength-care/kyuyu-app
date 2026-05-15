@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>給油報告 — Strength</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
+
+  :root {
+    --ink:   #0D1F2D;
+    --steel: #1A3A4A;
+    --fuel:  #00B4D8;
+    --fuel2: #0096C7;
+    --amber: #F77F00;
+    --ok:    #06A77D;
+    --err:   #D62246;
+    --bg:    #F2F6F9;
+    --card:  #FFFFFF;
+    --line:  #E0E8EE;
+    --muted: #6E8898;
+    --r:     14px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--ink); min-height: 100vh; padding-bottom: 56px; }
+
+  /* HEADER */
+  .hdr { background: var(--steel); padding: 48px 20px 24px; position: relative; overflow: hidden; }
+  .hdr::after { content: '⛽'; position: absolute; right: -8px; top: 8px; font-size: 88px; opacity: .07; pointer-events: none; }
+  .hdr-eye  { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--fuel); margin-bottom: 6px; }
+  .hdr-ttl  { font-size: 24px; font-weight: 900; color: #fff; line-height: 1.15; }
+  .hdr-sub  { font-size: 12px; color: rgba(255,255,255,.5); margin-top: 5px; }
+
+  /* SETUP BANNER */
+  .setup-banner { background: #FFF3CD; border-bottom: 2px solid var(--amber); padding: 10px 18px; font-size: 12px; color: #7A4100; display: flex; align-items: center; gap: 10px; }
+  .setup-banner.hidden { display: none; }
+  .setup-banner strong { font-weight: 700; }
+  .setup-banner button { margin-left: auto; background: var(--amber); color: #fff; border: none; border-radius: 8px; padding: 5px 14px; font-size: 11px; font-weight: 700; font-family: inherit; cursor: pointer; white-space: nowrap; }
+
+  /* WRAP */
+  .wrap { max-width: 440px; margin: 0 auto; padding: 0 14px; }
+
+  /* SECTION LABEL */
+  .slabel { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 22px 2px 8px; }
+
+  /* CARD */
+  .card { background: var(--card); border-radius: var(--r); box-shadow: 0 1px 8px rgba(13,31,45,.07); overflow: hidden; }
+
+  /* FIELD */
+  .field { display: flex; align-items: center; padding: 13px 16px; gap: 12px; border-bottom: 1px solid var(--line); }
+  .field:last-child { border-bottom: none; }
+  .fi { font-size: 19px; flex-shrink: 0; width: 26px; text-align: center; }
+  .fb { flex: 1; min-width: 0; }
+  .fl { font-size: 10px; font-weight: 700; letter-spacing: .05em; color: var(--muted); text-transform: uppercase; margin-bottom: 2px; display: block; }
+  .field input {
+    width: 100%; font-family: inherit; font-size: 16px; font-weight: 500;
+    color: var(--ink); background: transparent; border: none; outline: none;
+    -webkit-appearance: none; appearance: none; padding: 0;
+  }
+  .field input::placeholder { color: #C5D3DC; }
+  .funit { font-size: 13px; color: var(--muted); flex-shrink: 0; }
+
+  /* OCR エリア */
+  .ocr-area { padding: 14px; }
+  .ocr-btn {
+    width: 100%; border: none; border-radius: 12px;
+    background: linear-gradient(135deg, var(--fuel), var(--fuel2));
+    padding: 18px 16px;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    cursor: pointer; transition: opacity .12s, transform .1s;
+    box-shadow: 0 4px 16px rgba(0,180,216,.28);
+  }
+  .ocr-btn:active { transform: scale(.97); opacity: .9; }
+  .ocr-btn .o-ico { font-size: 26px; }
+  .ocr-btn-txt { text-align: left; }
+  .ocr-btn-main { font-size: 15px; font-weight: 700; color: #fff; display: block; }
+  .ocr-btn-sub  { font-size: 11px; color: rgba(255,255,255,.7); display: block; margin-top: 2px; }
+
+  #photoInput { display: none; }
+
+  /* OCR 状態表示 */
+  .ocr-status { display: none; align-items: center; gap: 10px; margin-top: 12px; padding: 12px 14px; border-radius: 10px; font-size: 13px; }
+  .ocr-status.reading { background: #EBF6FC; color: var(--fuel2); }
+  .ocr-status.done    { background: #EBF8F1; color: var(--ok); font-weight: 600; }
+  .ocr-status.fail    { background: #FFF0F3; color: var(--err); }
+  .ocr-spin { width: 18px; height: 18px; border: 2px solid rgba(0,150,199,.3); border-top-color: var(--fuel2); border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* プレビュー */
+  .preview-wrap { display: none; position: relative; border-radius: 10px; overflow: hidden; margin-top: 10px; }
+  .preview-wrap img { width: 100%; max-height: 160px; object-fit: cover; display: block; }
+  .rmv-btn { position: absolute; top: 7px; right: 7px; background: rgba(0,0,0,.55); color: #fff; border: none; border-radius: 50%; width: 26px; height: 26px; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+  /* フィールドのOCR自動入力ハイライト */
+  .field input.filled { color: var(--fuel2); font-weight: 700; }
+
+  /* 手動入力ヒント */
+  .manual-hint { text-align: center; font-size: 11px; color: var(--muted); margin: 10px 0 0; }
+
+  /* SUBMIT */
+  .sbtn-wrap { padding: 20px 14px 0; max-width: 440px; margin: 0 auto; }
+  .sbtn { width: 100%; background: linear-gradient(135deg, var(--steel), #2E5090); color: #fff; border: none; border-radius: var(--r); padding: 17px; font-family: inherit; font-size: 16px; font-weight: 700; letter-spacing: .03em; box-shadow: 0 4px 14px rgba(26,58,74,.25); cursor: pointer; transition: opacity .12s, transform .1s; display: flex; align-items: center; justify-content: center; gap: 9px; }
+  .sbtn:active { transform: scale(.98); opacity: .9; }
+  .sbtn:disabled { background: var(--line); color: var(--muted); box-shadow: none; cursor: default; }
+
+  /* ERROR */
+  .errmsg { display: none; background: #FFF0F3; border: 1px solid #FFB3C1; border-radius: 10px; padding: 11px 15px; font-size: 13px; color: var(--err); margin: 10px 14px 0; max-width: 440px; margin-left: auto; margin-right: auto; }
+  .errmsg.show { display: block; }
+
+  /* LOADING */
+  .loading { display: none; position: fixed; inset: 0; background: rgba(13,31,45,.72); z-index: 100; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+  .loading.show { display: flex; }
+  .spin-lg { width: 44px; height: 44px; border: 3px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin .75s linear infinite; }
+  .ltxt { color: #fff; font-size: 14px; font-weight: 600; }
+
+  /* DONE */
+  .done { display: none; position: fixed; inset: 0; background: linear-gradient(160deg, var(--steel), #0D2D3F); z-index: 200; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 36px; text-align: center; }
+  .done.show { display: flex; }
+  .done-ico { font-size: 68px; animation: pop .4s cubic-bezier(.175,.885,.32,1.275); }
+  @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+  .done-ttl { font-size: 22px; font-weight: 900; color: #fff; }
+  .done-sub { font-size: 13px; color: rgba(255,255,255,.6); line-height: 1.7; }
+  .done-card { background: rgba(255,255,255,.1); border-radius: 12px; padding: 14px 20px; width: 100%; max-width: 300px; text-align: left; }
+  .done-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; color: rgba(255,255,255,.8); border-bottom: 1px solid rgba(255,255,255,.1); }
+  .done-row:last-child { border: none; }
+  .done-row .dk { color: rgba(255,255,255,.4); }
+  .again-btn { background: rgba(255,255,255,.15); border: 2px solid rgba(255,255,255,.25); border-radius: 12px; padding: 13px 32px; color: #fff; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 4px; }
+
+  /* SETTINGS MODAL */
+  .moverlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 300; align-items: flex-end; justify-content: center; }
+  .moverlay.show { display: flex; }
+  .modal { background: #fff; border-radius: 18px 18px 0 0; padding: 26px 20px 44px; width: 100%; max-width: 440px; }
+  .modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .modal p  { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.65; }
+  .modal label { font-size: 11px; font-weight: 700; color: var(--muted); display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .05em; }
+  .modal input { width: 100%; border: 2px solid var(--line); border-radius: 10px; padding: 12px 13px; font-size: 14px; font-family: inherit; outline: none; margin-bottom: 14px; }
+  .modal input:focus { border-color: var(--fuel); }
+  .msave { width: 100%; background: var(--steel); color: #fff; border: none; border-radius: 10px; padding: 13px; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="setup-banner" id="setupBanner">
+  ⚙️ <strong>初回設定が必要です</strong>
+  <button onclick="openModal()">設定する</button>
+</div>
+
+<div class="hdr">
+  <div class="hdr-eye">Strength LLC</div>
+  <div class="hdr-ttl">給油報告</div>
+  <div class="hdr-sub">領収書を撮影すると自動で入力されます</div>
+</div>
+
+<div class="wrap">
+
+  <!-- 名前 -->
+  <div class="slabel">あなたの名前</div>
+  <div class="card">
+    <div class="field">
+      <div class="fi">👤</div>
+      <div class="fb">
+        <span class="fl">名前</span>
+        <input type="text" id="driver" placeholder="例：野村 実穂" autocomplete="name">
+      </div>
+    </div>
+  </div>
+
+  <!-- 領収書OCR -->
+  <div class="slabel">領収書を撮影して自動入力</div>
+  <div class="card">
+    <div class="ocr-area">
+      <div class="ocr-btn" onclick="document.getElementById('photoInput').click()">
+        <div class="o-ico">📷</div>
+        <div class="ocr-btn-txt">
+          <span class="ocr-btn-main">領収書を撮影する</span>
+          <span class="ocr-btn-sub">給油量・金額・日付を自動で読み取ります</span>
+        </div>
+      </div>
+      <input type="file" id="photoInput" accept="image/*" capture="environment" onchange="handlePhoto(this)">
+
+      <div class="ocr-status" id="ocrReading">
+        <div class="ocr-spin"></div>
+        <span>領収書を読み取り中...</span>
+      </div>
+      <div class="ocr-status" id="ocrDone">
+        ✅ 自動入力完了！内容を確認してください
+      </div>
+      <div class="ocr-status" id="ocrFail">
+        ⚠️ 読み取り失敗。手動で入力してください
+      </div>
+
+      <div class="preview-wrap" id="previewWrap">
+        <img id="previewImg" src="" alt="">
+        <button class="rmv-btn" onclick="removePhoto()">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="manual-hint">↓ 手動でも入力・修正できます</p>
+
+  <!-- 給油情報（OCRで自動入力 or 手動） -->
+  <div class="slabel">給油情報</div>
+  <div class="card">
+    <div class="field">
+      <div class="fi">📅</div>
+      <div class="fb">
+        <span class="fl">給油日</span>
+        <input type="date" id="date">
+      </div>
+    </div>
+    <div class="field">
+      <div class="fi">💧</div>
+      <div class="fb">
+        <span class="fl">給油量</span>
+        <input type="number" id="liter" placeholder="0.0" step="0.1" min="0" inputmode="decimal">
+      </div>
+      <div class="funit">L</div>
+    </div>
+    <div class="field">
+      <div class="fi">💴</div>
+      <div class="fb">
+        <span class="fl">金額</span>
+        <input type="number" id="amount" placeholder="0" step="1" min="0" inputmode="numeric">
+      </div>
+      <div class="funit">円</div>
+    </div>
+    <div class="field">
+      <div class="fi">🏪</div>
+      <div class="fb">
+        <span class="fl">スタンド名（自動入力）</span>
+        <input type="text" id="station" placeholder="ENEOS 志木店">
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="errmsg" id="errmsg"></div>
+
+<div class="sbtn-wrap">
+  <button class="sbtn" id="sbtn" onclick="submitForm()">
+    <span>⛽</span> 給油を報告する
+  </button>
+</div>
+
+<!-- 送信中 -->
+<div class="loading" id="loading">
+  <div class="spin-lg"></div>
+  <div class="ltxt">送信中...</div>
+</div>
+
+<!-- 完了 -->
+<div class="done" id="done">
+  <div class="done-ico">✅</div>
+  <div class="done-ttl">報告完了！</div>
+  <div class="done-sub">スプレッドシートに記録されました。<br>お疲れ様です。</div>
+  <div class="done-card" id="doneCard"></div>
+  <button class="again-btn" onclick="resetForm()">続けて入力する</button>
+</div>
+
+<!-- 設定モーダル -->
+<div class="moverlay" id="moverlay">
+  <div class="modal">
+    <h3>⚙️ 初回設定</h3>
+    <p>2つのURLを設定してください。どちらもGoogle Apps Scriptのデプロイ時に発行されます。</p>
+
+    <label>GAS URL（データ送信先）</label>
+    <input type="url" id="gasInput" placeholder="https://script.google.com/macros/s/...">
+
+    <label>Claude API Key（OCR用）</label>
+    <input type="text" id="claudeInput" placeholder="sk-ant-api...">
+
+    <button class="msave" onclick="saveSettings()">保存する</button>
+  </div>
+</div>
+
+<script>
+// ===== 状態 =====
+let photoB64  = '';
+let photoName = '';
+let ocrDone   = false;
+
+// ===== 初期化 =====
+window.addEventListener('load', () => {
+  const d = new Date();
+  document.getElementById('date').value =
+    `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+  const n = localStorage.getItem('driverName');
+  if (n) document.getElementById('driver').value = n;
+
+  checkSetup();
+});
+
+function checkSetup() {
+  const ok = localStorage.getItem('gasUrl') && localStorage.getItem('claudeKey');
+  document.getElementById('setupBanner').classList.toggle('hidden', !!ok);
+}
+
+// ===== 写真撮影 → OCR =====
+async function handlePhoto(inp) {
+  if (!inp.files?.[0]) return;
+  const file = inp.files[0];
+  photoName = file.name;
+
+  // Base64変換
+  photoB64 = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload  = e => res(e.target.result);
+    r.onerror = () => rej(new Error('読み込み失敗'));
+    r.readAsDataURL(file);
+  });
+
+  // プレビュー表示
+  document.getElementById('previewImg').src = photoB64;
+  document.getElementById('previewWrap').style.display = 'block';
+
+  // OCR実行
+  await runOCR(photoB64);
+}
+
+async function runOCR(b64) {
+  const apiKey = localStorage.getItem('claudeKey');
+  if (!apiKey) {
+    showOcrStatus('fail');
+    return;
+  }
+
+  showOcrStatus('reading');
+
+  try {
+    const mediaType = b64.split(';')[0].split(':')[1];
+    const imageData = b64.split(',')[1];
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 300,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType, data: imageData }
+            },
+            {
+              type: 'text',
+              text: `これはガソリンスタンドの領収書です。以下の情報をJSONで返してください。
+見つからない項目はnullにしてください。日付はYYYY-MM-DD形式で返してください。
+必ずJSONのみを返し、説明文は不要です。
+
+{
+  "date": "YYYY-MM-DD または null",
+  "liter": 数値 または null,
+  "amount": 数値（円、税込合計） または null,
+  "station": "店舗名 または null"
+}`
+            }
+          ]
+        }]
+      })
+    });
+
+    const data = await res.json();
+    const text = data.content?.[0]?.text || '';
+
+    // JSONパース
+    const clean = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    // フォームに自動入力
+    let filled = false;
+    if (parsed.date)    { setField('date',    parsed.date);              filled = true; }
+    if (parsed.liter)   { setField('liter',   parsed.liter);             filled = true; }
+    if (parsed.amount)  { setField('amount',  Math.round(parsed.amount));filled = true; }
+    if (parsed.station) { setField('station', parsed.station);           filled = true; }
+
+    showOcrStatus(filled ? 'done' : 'fail');
+    ocrDone = true;
+
+  } catch (e) {
+    console.error('OCRエラー:', e);
+    showOcrStatus('fail');
+  }
+}
+
+function setField(id, val) {
+  const el = document.getElementById(id);
+  el.value = val;
+  el.classList.add('filled');
+  // ユーザーが編集したらハイライト解除
+  el.addEventListener('input', () => el.classList.remove('filled'), { once: true });
+}
+
+function showOcrStatus(type) {
+  ['reading', 'done', 'fail'].forEach(t => {
+    document.getElementById(`ocr${t.charAt(0).toUpperCase()+t.slice(1)}`).style.display = 'none';
+  });
+  if (type === 'reading') document.getElementById('ocrReading').style.display = 'flex';
+  if (type === 'done')    document.getElementById('ocrDone').style.display    = 'flex';
+  if (type === 'fail')    document.getElementById('ocrFail').style.display    = 'flex';
+}
+
+function removePhoto() {
+  photoB64 = photoName = '';
+  document.getElementById('photoInput').value = '';
+  document.getElementById('previewWrap').style.display = 'none';
+  ['ocrReading','ocrDone','ocrFail'].forEach(id => document.getElementById(id).style.display = 'none');
+  // フィールドのハイライト解除
+  ['date','liter','amount','station'].forEach(id => document.getElementById(id).classList.remove('filled'));
+  ocrDone = false;
+}
+
+// ===== バリデーション =====
+function validate() {
+  const errs = [];
+  if (!document.getElementById('driver').value.trim()) errs.push('名前を入力してください');
+  if (!document.getElementById('date').value)          errs.push('給油日を入力してください');
+  if (!(parseFloat(document.getElementById('liter').value) > 0))  errs.push('給油量を入力してください');
+  if (!(parseInt(document.getElementById('amount').value) > 0))   errs.push('金額を入力してください');
+  return errs;
+}
+
+// ===== 送信 =====
+async function submitForm() {
+  const errs = validate();
+  const em = document.getElementById('errmsg');
+  if (errs.length) {
+    em.textContent = '⚠️ ' + errs.join(' / ');
+    em.classList.add('show');
+    em.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  em.classList.remove('show');
+
+  const gasUrl = localStorage.getItem('gasUrl');
+  if (!gasUrl) { openModal(); return; }
+
+  localStorage.setItem('driverName', document.getElementById('driver').value.trim());
+
+  const payload = {
+    driver:  document.getElementById('driver').value.trim(),
+    date:    document.getElementById('date').value,
+    liter:   parseFloat(document.getElementById('liter').value),
+    amount:  parseInt(document.getElementById('amount').value),
+    station: document.getElementById('station').value.trim(),
+    photo:   photoB64,
+    photoName,
+    ocr:     ocrDone,
+  };
+
+  document.getElementById('loading').classList.add('show');
+  document.getElementById('sbtn').disabled = true;
+
+  try {
+    const res  = await fetch(gasUrl, { method: 'POST', body: JSON.stringify(payload) });
+    const json = await res.json();
+    document.getElementById('loading').classList.remove('show');
+    if (json.status === 'ok') showDone(payload);
+    else throw new Error(json.message || 'エラー');
+  } catch (e) {
+    document.getElementById('loading').classList.remove('show');
+    document.getElementById('sbtn').disabled = false;
+    em.textContent = '⚠️ 送信失敗：' + e.message;
+    em.classList.add('show');
+  }
+}
+
+// ===== 完了 =====
+function showDone(d) {
+  document.getElementById('doneCard').innerHTML = `
+    <div class="done-row"><span class="dk">名前</span><span>${d.driver}</span></div>
+    <div class="done-row"><span class="dk">日付</span><span>${d.date.replace(/-/g,'/')}</span></div>
+    <div class="done-row"><span class="dk">給油量</span><span>${d.liter}L</span></div>
+    <div class="done-row"><span class="dk">金額</span><span>¥${d.amount.toLocaleString()}</span></div>
+    <div class="done-row"><span class="dk">スタンド</span><span>${d.station||'—'}</span></div>
+    <div class="done-row"><span class="dk">写真</span><span>${d.photo ? '📎 添付済' : 'なし'}</span></div>`;
+  document.getElementById('done').classList.add('show');
+}
+
+// ===== リセット =====
+function resetForm() {
+  document.getElementById('done').classList.remove('show');
+  document.getElementById('sbtn').disabled = false;
+  ['liter','amount','station'].forEach(id => {
+    document.getElementById(id).value = '';
+    document.getElementById(id).classList.remove('filled');
+  });
+  removePhoto();
+  window.scrollTo(0, 0);
+}
+
+// ===== 設定モーダル =====
+function openModal() {
+  document.getElementById('gasInput').value    = localStorage.getItem('gasUrl')    || '';
+  document.getElementById('claudeInput').value = localStorage.getItem('claudeKey') || '';
+  document.getElementById('moverlay').classList.add('show');
+}
+function saveSettings() {
+  const gas    = document.getElementById('gasInput').value.trim();
+  const claude = document.getElementById('claudeInput').value.trim();
+  if (!gas || !claude) return;
+  localStorage.setItem('gasUrl',    gas);
+  localStorage.setItem('claudeKey', claude);
+  document.getElementById('moverlay').classList.remove('show');
+  checkSetup();
+}
+document.getElementById('moverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('show');
+});
+</script>
+</body>
+</html>
