@@ -275,8 +275,7 @@
     <label>GAS URL（データ送信先）</label>
     <input type="url" id="gasInput" placeholder="https://script.google.com/macros/s/...">
 
-    <label>Claude API Key（OCR用）</label>
-    <input type="text" id="claudeInput" placeholder="sk-ant-api...">
+    <label style="color:#999;font-size:10px;">Claude API Key はGAS側で管理しています</label>
 
     <button class="msave" onclick="saveSettings()">保存する</button>
   </div>
@@ -301,7 +300,7 @@ window.addEventListener('load', () => {
 });
 
 function checkSetup() {
-  const ok = localStorage.getItem('gasUrl') && localStorage.getItem('claudeKey');
+  const ok = localStorage.getItem('gasUrl');
   document.getElementById('setupBanner').classList.toggle('hidden', !!ok);
 }
 
@@ -328,8 +327,8 @@ async function handlePhoto(inp) {
 }
 
 async function runOCR(b64) {
-  const apiKey = localStorage.getItem('claudeKey');
-  if (!apiKey) {
+  const gasUrl = localStorage.getItem('gasUrl');
+  if (!gasUrl) {
     showOcrStatus('fail');
     return;
   }
@@ -337,50 +336,19 @@ async function runOCR(b64) {
   showOcrStatus('reading');
 
   try {
-    const mediaType = b64.split(';')[0].split(':')[1];
-    const imageData = b64.split(',')[1];
-
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    // GAS経由でClaude APIを呼ぶ（CORSエラー回避）
+    const res = await fetch(gasUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 300,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: mediaType, data: imageData }
-            },
-            {
-              type: 'text',
-              text: `これはガソリンスタンドの領収書です。以下の情報をJSONで返してください。
-見つからない項目はnullにしてください。日付はYYYY-MM-DD形式で返してください。
-必ずJSONのみを返し、説明文は不要です。
-
-{
-  "date": "YYYY-MM-DD または null",
-  "liter": 数値 または null,
-  "amount": 数値（円、税込合計） または null,
-  "station": "店舗名 または null"
-}`
-            }
-          ]
-        }]
-      })
+      body: JSON.stringify({ action: 'ocr', photo: b64 }),
     });
 
-    const data = await res.json();
-    const text = data.content?.[0]?.text || '';
+    const result = await res.json();
 
-    // JSONパース
-    const clean = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
+    if (result.status !== 'ok' || !result.data) {
+      throw new Error(result.message || 'OCR失敗');
+    }
+
+    const parsed = result.data;
 
     // フォームに自動入力
     let filled = false;
@@ -511,11 +479,9 @@ function openModal() {
   document.getElementById('moverlay').classList.add('show');
 }
 function saveSettings() {
-  const gas    = document.getElementById('gasInput').value.trim();
-  const claude = document.getElementById('claudeInput').value.trim();
-  if (!gas || !claude) return;
-  localStorage.setItem('gasUrl',    gas);
-  localStorage.setItem('claudeKey', claude);
+  const gas = document.getElementById('gasInput').value.trim();
+  if (!gas) return;
+  localStorage.setItem('gasUrl', gas);
   document.getElementById('moverlay').classList.remove('show');
   checkSetup();
 }
