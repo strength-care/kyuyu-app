@@ -474,8 +474,7 @@ function resetForm() {
 
 // ===== 設定モーダル =====
 function openModal() {
-  document.getElementById('gasInput').value    = localStorage.getItem('gasUrl')    || '';
-  document.getElementById('claudeInput').value = localStorage.getItem('claudeKey') || '';
+  document.getElementById('gasInput').value = localStorage.getItem('gasUrl') || '';
   document.getElementById('moverlay').classList.add('show');
 }
 function saveSettings() {
