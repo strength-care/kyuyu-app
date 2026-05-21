@@ -296,12 +296,15 @@ window.addEventListener('load', () => {
   const n = localStorage.getItem('driverName');
   if (n) document.getElementById('driver').value = n;
 
+  // GAS URLを自動設定（変更不要）
+  localStorage.setItem('gasUrl', 'https://script.google.com/macros/s/AKfycbzcwpRcl1-VuLSW1kM-nxDfSEe-DctRW7tW5vjrrxtWUhF5BW1rceJURGOtqa2hrXXs/exec');
+
   checkSetup();
 });
 
 function checkSetup() {
-  const ok = localStorage.getItem('gasUrl');
-  document.getElementById('setupBanner').classList.toggle('hidden', !!ok);
+  // GAS URLはアプリに埋め込み済みのため常に非表示
+  document.getElementById('setupBanner').classList.add('hidden');
 }
 
 // ===== 写真撮影 → OCR =====
