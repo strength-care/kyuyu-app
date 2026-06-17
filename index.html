@@ -296,8 +296,8 @@ window.addEventListener('load', () => {
   const n = localStorage.getItem('driverName');
   if (n) document.getElementById('driver').value = n;
 
-  // GAS URLを自動設定（変更不要）
-  localStorage.setItem('gasUrl', 'https://script.google.com/macros/s/AKfycbzcwpRcl1-VuLSW1kM-nxDfSEe-DctRW7tW5vjrrxtWUhF5BW1rceJURGOtqa2hrXXs/exec');
+  // GAS URLを自動設定（変更不要）※小窪さん環境（新）に差し替え済み
+  localStorage.setItem('gasUrl', 'https://script.google.com/macros/s/AKfycby-fUFqYArvgu0xxGXAdjMcn9EZiYxwfSIULU2f9FsYtq31Om_jZ-M39BvG2dcrpC06/exec');
 
   checkSetup();
 });
