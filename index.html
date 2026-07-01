@@ -74,6 +74,10 @@
   .catrow .nm{width:110px;flex:0 0 auto;color:var(--ink);}
   .catrow .track{flex:1;background:#f3ece1;border-radius:5px;overflow:hidden;}
   .catrow .amt{width:110px;flex:0 0 auto;text-align:right;font-weight:800;color:var(--navy);}
+
+  /* iOSのdate入力を他の入力と揃える（中央寄せ・拡大を防ぐ） */
+  input[type="date"]{ -webkit-appearance:none; appearance:none; text-align:left; min-height:44px; line-height:1.2; }
+  input[type="date"]::-webkit-date-and-time-value{ text-align:left; }
 </style>
 </head>
 <body>
