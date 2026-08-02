@@ -273,7 +273,7 @@
         <select id="acct-chk" onchange="acctRender()"><option value="">確認状態：すべて</option><option value="wait">未確認のみ</option><option value="ok">確認済みのみ</option></select>
         <span class="acct-status" id="acct-status"></span>
         <span style="flex:1"></span>
-        <button class="btn o sm" onclick="acctReload()">↻ 更新</button>
+        <button class="btn o sm" onclick="acctForceReload()">↻ 更新</button>
         <button class="btn sm" onclick="exportCSV()">CSV書き出し</button>
       </div>
       <div class="kpis" id="kpis"></div>
@@ -321,6 +321,10 @@ function showPage(p){
   s("seg-acct").classList.toggle("on", p==="acct");
   s("page-rec").classList.toggle("on", p==="rec");
   s("page-acct").classList.toggle("on", p==="acct");
+  /* 経理タブを開いた時点で、裏で明細を読み始める。
+     パスワードを打っている数秒ぶん、待ち時間が短くなる。
+     （経理タブを開かない職員は読みに行かない） */
+  if(p==="acct") acctPrefetch();
   window.scrollTo({top:0});
 }
 
@@ -544,11 +548,24 @@ function nextMaint(){
 }
 
 /* ===== 経理ビュー ===== */
-let acctRows=[], acctLoaded=false;
+let acctRows=[], acctLoaded=false, acctPending=null;
+
+/* 先読み。すでに読み終わっていれば何もせず、
+   読み込み中なら同じ処理を待つ（同じ内容を2回取りに行かない） */
+function acctPrefetch(){
+  if(acctLoaded) return Promise.resolve();
+  if(acctPending) return acctPending;
+  acctPending = acctReload().catch(()=>{}).then(()=>{
+    if(!acctLoaded) acctPending=null;   // 失敗したら次でやり直せるように
+  });
+  return acctPending;
+}
+
 function unlockAcct(){
   if(s("acct-pw").value!==ACCT_PW){ s("acct-pw-err").textContent="パスワードが違います"; return; }
   s("acct-lock").classList.add("hide"); s("acct-body").classList.remove("hide");
-  if(!acctLoaded) acctReload();
+  if(acctLoaded){ acctRender(); }      // 先読み済みなら待たずに表示
+  else{ s("acct-status").textContent="読み込み中…"; acctPrefetch(); }
 }
 async function acctReload(){
   const st=s("acct-status"); st.className="acct-status"; st.textContent="読み込み中…";
@@ -571,6 +588,9 @@ async function acctReload(){
     acctRender();
   }catch(e){ st.className="acct-status err"; st.textContent="エラー："+e.message; }
 }
+/* 手動更新：先読みの記録を消してから読み直す */
+function acctForceReload(){ acctLoaded=false; acctPending=null; acctPrefetch(); }
+
 function acctRender(){
   const mk=s("acct-month").value;
   const ck=s("acct-chk").value;
