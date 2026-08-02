@@ -299,6 +299,18 @@ let currentImage = null;
 const LASTUSER = "serene_kyuyu_driver";
 function s(id){ return document.getElementById(id); }
 function yen(n){ return "¥"+(Number(n)||0).toLocaleString(); }
+/* 名前のゆれ（「野村 実穂」と「野村実穂」）を同じ人として扱う。
+   nameClean=表示用に整えた形／nameKey=同じ人かの判定に使う形（空白なし） */
+function nameClean(v){ return String(v==null?"":v).replace(/\u3000/g," ").replace(/[\t\r\n]+/g," ").replace(/\s+/g," ").trim(); }
+function nameKey(v){ return nameClean(v).replace(/\s/g,""); }
+/* 同じキーの名前が複数の書き方で出たとき、空白ありの「姓 名」を正とする */
+function canonNames(arr){
+  const m={};
+  arr.forEach(v=>{ const c=nameClean(v); if(!c) return; const k=nameKey(c);
+    if(!m[k]){ m[k]=c; return; }
+    if(m[k].indexOf(" ")<0 && c.indexOf(" ")>=0) m[k]=c; });
+  return m;
+}
 function esc(t){ return String(t==null?"":t).replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m])); }
 function gasPost(payload){
   return fetch(GAS_URL, { method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload) }).then(r=>r.json());
@@ -347,7 +359,7 @@ async function runOCR(){
   }catch(e){ st.className="status err"; st.textContent="自動読み取りできませんでした。手で入力して報告してください。（"+e.message+"）"; }
 }
 async function send(){
-  const driver=s("f-driver").value.trim();
+  const driver=nameClean(s("f-driver").value);
   const date=s("f-date").value;
   const liter=parseFloat(s("f-liter").value)||0;
   const amount=parseInt(s("f-amount").value)||0;
@@ -501,7 +513,7 @@ async function sendMaint(){
   const err=s("msendErr");
   if(!TAIYA_URL){ err.textContent="送信先（TAIYA_URL）が未設定です。"; return; }
   const id=s("m-car").value, kind=s("m-kind").value, date=s("m-date").value;
-  const staff=s("m-staff").value.trim();
+  const staff=nameClean(s("m-staff").value);
   if(!id){ err.textContent="車を選んでください。"; return; }
   if(!staff){ err.textContent="名前を入れてください。"; return; }
   if(!kind){ err.textContent="やったことを選んでください。"; return; }
@@ -543,7 +555,15 @@ async function acctReload(){
   try{
     const r=await gasPost({action:"list"});
     if(!r.ok) throw new Error(r.error||"取得失敗");
-    acctRows=(r.rows||[]).map(x=>({...x, mk:(String(x.date||x.received||"")).slice(0,7)}));
+    const raw=(r.rows||[]);
+    const canon=canonNames(raw.map(x=>x.driver));
+    acctRows=raw.map(x=>{
+      const dk=x.driverKey||nameKey(x.driver);
+      return {...x,
+        driver:(dk?(canon[dk]||nameClean(x.driver)):""),
+        driverKey:dk,
+        mk:(String(x.date||x.received||"")).slice(0,7)};
+    });
     acctLoaded=true;
     const months=[...new Set(acctRows.map(r=>r.mk).filter(Boolean))].sort().reverse();
     s("acct-month").innerHTML='<option value="">すべての期間</option>'+months.map(m=>`<option value="${m}">${m}</option>`).join("");
@@ -567,7 +587,13 @@ function acctRender(){
     ["未確認", waitn+"件"]
   ].map(([l,v])=>`<div class="kpi"><div class="lbl">${l}</div><div class="val">${v}</div></div>`).join("");
   // スタッフ別
-  const map={}; list.forEach(r=>{ const c=r.driver||"未記入"; map[c]=(map[c]||0)+r.amount; });
+  /* 集計は空白なしキーで合算し、表示は「姓 名」に寄せた名前を使う */
+  const map={};
+  list.forEach(r=>{
+    const k=r.driverKey||nameKey(r.driver);
+    const c=k?(r.driver||nameClean(r.driver)):"未記入";
+    map[c]=(map[c]||0)+r.amount;
+  });
   const es=Object.entries(map).sort((a,b)=>b[1]-a[1]);
   if(!es.length){ s("catbreak").innerHTML='<div class="empty">明細がありません</div>'; }
   else{ const mx=Math.max(...es.map(e=>e[1]),1);
