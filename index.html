@@ -135,24 +135,6 @@
   .tmore{width:100%;min-height:44px;border:1px dashed var(--line);border-radius:11px;background:#fff;
     color:var(--muted);font-size:13px;cursor:pointer;margin:4px 0 12px;}
   #t-others{display:none;}
-  .wsec{margin-top:13px;border-top:1px dashed var(--line);padding-top:11px;}
-  .wttl{font-size:12.5px;font-weight:800;color:var(--muted);margin-bottom:8px;}
-  .wrow{display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid #f5efe6;flex-wrap:wrap;}
-  .wrow:last-child{border-bottom:none;}
-  .wnm{flex:0 0 76px;font-size:13.5px;font-weight:700;}
-  .wmid{flex:1 1 150px;font-size:12px;color:var(--muted);line-height:1.65;}
-  .wbtn{flex:0 0 auto;min-height:40px;padding:0 13px;border:none;border-radius:10px;background:var(--gold);
-    color:#3a2a06;font-size:13px;font-weight:800;cursor:pointer;}
-  .wbtn.done{background:#eaf5ec;color:#2f7d4f;border:1px solid #bfe0c9;}
-  .wbtn.busy{opacity:.55;pointer-events:none;}
-  .wundo{display:block;margin-top:5px;border:none;background:none;color:var(--muted);
-    font-size:11.5px;text-decoration:underline;cursor:pointer;}
-  .wcost{display:block;margin-top:5px;border:none;background:none;color:#9A6634;
-    font-size:11.5px;text-decoration:underline;cursor:pointer;}
-  .wdue{display:inline-block;font-size:11px;padding:2px 7px;border-radius:999px;margin-left:4px;}
-  .wdue.ok{background:#f3ece1;color:var(--muted);}
-  .wdue.soon{background:#fdf3dd;color:#9a6b00;font-weight:700;}
-  .wdue.over{background:#fbeae7;color:#c0392b;font-weight:700;}
 </style>
 </head>
 <body>
@@ -187,7 +169,7 @@
       </button>
       <button class="pickbtn" onclick="setMode('tire')">
         <span class="ic">🛞</span><span class="nm">タイヤ交換</span>
-        <span class="ds">夏・冬タイヤの入れ替えを記録</span>
+        <span class="ds">夏タイヤ・冬タイヤの入れ替えだけ</span>
       </button>
     </div>
   </div>
@@ -312,7 +294,8 @@
         ・春＝夏タイヤへ、冬＝冬タイヤへ入れ替えたときに押してください。<br>
         ・押し間違えたら「取り消す」で戻せます。<br>
         ・車の割り当てが実際と違う場合は「別の車を選ぶ」から選んでください（記録には押した人の名前が残ります）。<br>
-        ・車の割り当て自体の変更は所長にお伝えください。
+        ・車の割り当て自体の変更は所長にお伝えください。<br>
+        ・<b>点検・オイル交換・車検・修理・洗車は「車両整備」から</b>報告してください。
       </p>
     </div>
   </div>
@@ -483,7 +466,7 @@ function setMode(m){
    もともと別アプリだった「車両メンテ」をここに取り込んだもの。
    車のことを1つの画面で済ませられるようにするため（2026-08-03）。
    車両一覧は車両整備と同じ loadCars() の結果を使い回すので、読み込みは1回で済む。 */
-let SEASONS=[], NOW="", TODAY="", WORKS=["点検","オイル交換","車検"];
+let SEASONS=[], NOW="", TODAY="";
 
 async function tireOpen(){
   const box=s("t-app");
@@ -504,7 +487,6 @@ function tireCapture(d){
   SEASONS = d.seasons || [];
   NOW     = d.now || "";
   TODAY   = d.today || new Date().toISOString().slice(0,10);
-  if(d.works && d.works.length) WORKS = d.works;
 }
 
 /* 自分の車か
@@ -525,70 +507,6 @@ function myCars(){
 /* ---- 日付まわり ---- */
 function tparse(v){ const m=String(v||"").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return m ? new Date(+m[1],+m[2]-1,+m[3]) : null; }
-function tfmt(v){ const d=tparse(v); return d ? (d.getMonth()+1)+"/"+d.getDate()+"（"+d.getFullYear()+"）" : "—"; }
-function tdaysTo(v){ const d=tparse(v); if(!d) return null;
-  const t=tparse(TODAY)||new Date(); return Math.round((d-t)/86400000); }
-function lastOf(c,w){ const l=(c.works&&c.works[w])||[]; return l.length?l[0]:null; }
-
-/* 点検・オイル交換の目安日
-   起点＝「車検を実施した記録」があればその日、なければ車検満了日。
-   直近で実施していれば、その日から intervalM ヶ月後を次回とする。 */
-function baseDate(c){ const sk=lastOf(c,"車検"); return (sk&&sk.d)?sk.d:(c.shaken||""); }
-function nextDue(c,w){
-  if(w==="車検") return c.shaken||"";
-  const last=lastOf(c,w);
-  const from=(last&&last.d)?last.d:baseDate(c);
-  return tparse(from) ? addMonths(from, intervalM) : "";
-}
-function dueChip(due){
-  if(!due) return '<span class="wdue ok">目安なし</span>';
-  const n=tdaysTo(due);
-  if(n===null) return '<span class="wdue ok">目安なし</span>';
-  if(n<0)   return '<span class="wdue over">'+Math.abs(n)+'日 過ぎ</span>';
-  if(n<=30) return '<span class="wdue soon">あと'+n+'日</span>';
-  return '<span class="wdue ok">あと'+n+'日</span>';
-}
-
-/* 整備ブロック（点検・オイル交換・車検）
-   ワンタップで「今日やった」を残せる。費用まで残したい人は
-   そのまま「費用も入れる」で車両整備の画面へ引き継ぐ。 */
-function worksHTML(c){
-  let h='<div class="wsec"><div class="wttl">その他にやったこと</div>';
-  WORKS.forEach(w=>{
-    const last=lastOf(c,w);
-    const doneToday=!!(last&&last.d===TODAY);
-    const due=nextDue(c,w);
-    const info=last ? ('前回 <b>'+esc(tfmt(last.d))+'</b>'+(last.by?'（'+esc(last.by)+'）':''))
-                    : '前回の記録なし';
-    const label=(w==="車検")?"車検 満了":"次の目安";
-    h+='<div class="wrow">'
-      +  '<div class="wnm">'+esc(w)+'</div>'
-      +  '<div class="wmid">'+info+'<br>'+label+' '+(due?esc(tfmt(due)):'—')+' '+dueChip(due)+'</div>'
-      +  '<div style="text-align:right">'
-      +    (doneToday
-            ? '<button class="wbtn done" onclick="tapWork(\''+esc(c.id)+'\',\''+esc(w)+'\',false,this)">✓ 今日 記録ずみ</button>'
-              +'<button class="wundo" onclick="tapWork(\''+esc(c.id)+'\',\''+esc(w)+'\',false,this)">取り消す</button>'
-            : '<button class="wbtn" onclick="tapWork(\''+esc(c.id)+'\',\''+esc(w)+'\',true,this)">今日やった</button>')
-      +    '<button class="wcost" onclick="toMaint(\''+esc(c.id)+'\',\''+esc(w)+'\')">費用も入れる</button>'
-      +  '</div>'
-      +'</div>';
-  });
-  return h+'</div>';
-}
-
-/* 費用・業者・領収書まで残したいときは、車両整備の画面へ引き継ぐ */
-function toMaint(id, kind){
-  setMode('maint');
-  setTimeout(()=>{
-    const sel=s("m-car"); if(sel) sel.value=id;
-    const k=s("m-kind");
-    if(k && [...k.options].some(o=>o.value===kind||o.text===kind)) k.value=kind;
-    if(!s("m-date").value) s("m-date").value=TODAY||new Date().toISOString().slice(0,10);
-    onCarPick();
-    window.scrollTo({top:0});
-  },60);
-}
-
 function tireCarHTML(c, mine){
   const on = c.tires && c.tires[NOW];
   let h='<div class="tcar'+(mine?" mine":"")+'">'
@@ -618,7 +536,7 @@ function tireCarHTML(c, mine){
              +esc(x)+(o?" ✓":"")+'</button>';
       }).join("")+'</div></details>';
   }
-  return h + worksHTML(c) + '</div>';
+  return h + '</div>';
 }
 
 function tireRender(){
@@ -660,24 +578,6 @@ function tapTire(id, season, on, btn){
       btn.classList.remove("busy");
       if(!res||!res.ok) throw new Error((res&&res.error)||"保存できませんでした");
       const c=cars.find(x=>String(x.id)===String(id)); if(c) c.tires=res.tires||{};
-      tireRender();
-    })
-    .catch(e=>{ btn.classList.remove("busy"); alert(String(e.message||e)); });
-}
-
-/* 押した：点検・オイル交換・車検（ワンタップ） */
-function tapWork(id, work, on, btn){
-  const me=String(window._loginName||s("m-staff").value||"").trim();
-  if(!me){ alert("お名前が取れませんでした。ポータルから開いてください。"); return; }
-  if(on && !confirm("「"+work+"」を今日の日付で記録します。よろしいですか？")) return;
-  btn.classList.add("busy");
-  fetch(TAIYA_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
-    body:JSON.stringify({action:"setWork",id:id,work:work,on:on,staff:nameClean(me)})})
-    .then(r=>r.json())
-    .then(res=>{
-      btn.classList.remove("busy");
-      if(!res||!res.ok) throw new Error((res&&res.error)||"保存できませんでした");
-      const c=cars.find(x=>String(x.id)===String(id)); if(c) c.works=res.works||{};
       tireRender();
     })
     .catch(e=>{ btn.classList.remove("busy"); alert(String(e.message||e)); });
