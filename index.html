@@ -162,6 +162,22 @@
   .edtag{display:inline-block;font-size:10px;font-weight:800;background:#eef1f4;color:#5a6b7d;
     border-radius:8px;padding:1px 6px;margin-left:5px;}
   tbody tr.edited td{background:#FFFCF2;}
+
+  /* ===== 否認・消去（2026-09-01） ===== */
+  .badge.deny{background:#fdeaea;color:#b3261e;}
+  tbody tr.denied td{background:#FFF6F6;color:#8a6f6f;}
+  tbody tr.denied .dwhy{display:block;font-size:10.5px;color:#b3261e;font-weight:700;margin-top:2px;}
+  .dnbtn{border:1px solid #e0a9a4;background:#fff;color:#b3261e;border-radius:8px;padding:5px 9px;
+    font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .erbtn{border:1px solid var(--line);background:#fff;color:#6b7280;border-radius:8px;padding:5px 9px;
+    font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .dnbtn.busy,.erbtn.busy{opacity:.5;pointer-events:none;}
+  .hidnote{font-size:12.5px;color:#b3261e;font-weight:700;margin:0 0 9px;}
+  .showdeny{font-size:12.5px;font-weight:800;color:var(--muted);display:inline-flex;
+    align-items:center;gap:6px;cursor:pointer;white-space:nowrap;}
+  .showdeny input{width:auto;margin:0;}
+  .ed-warn{font-size:12px;color:#8a201a;background:#fdeceb;border-radius:8px;
+    padding:8px 10px;margin:10px 0 0;line-height:1.7;}
   .logolink{display:inline-block;cursor:pointer;border-radius:9px;}
   .logolink:hover .applogo{box-shadow:0 0 0 2px rgba(255,255,255,.6);}
   .logolink:active .applogo{transform:translateY(1px);}
@@ -354,6 +370,7 @@
       <div class="acct-toolbar">
         <select id="acct-month" onchange="acctRender()"><option value="">すべての期間</option></select>
         <select id="acct-chk" onchange="acctRender()"><option value="">確認状態：すべて</option><option value="wait">未確認のみ</option><option value="ok">確認済みのみ</option></select>
+        <label class="showdeny"><input type="checkbox" id="showDeny" onchange="acctRender()"> 否認したものも表示</label>
         <span class="acct-status" id="acct-status"></span>
         <span style="flex:1"></span>
         <button class="btn o sm" onclick="acctForceReload()">↻ 更新</button>
@@ -361,7 +378,7 @@
       </div>
       <div class="kpis" id="kpis"></div>
       <div class="panel"><h3>スタッフ別の給油額（表示期間）</h3><div id="catbreak"></div></div>
-      <div class="panel"><h3>明細一覧</h3><div class="scroll" id="listWrap"></div></div>
+      <div class="panel"><h3>明細一覧</h3><div class="hidnote" id="hidNote" style="display:none"></div><div class="scroll" id="listWrap"></div></div>
     </div>
   </div>
 </main>
@@ -385,6 +402,27 @@
     <div class="ed-btns">
       <button class="ghost" onclick="closeEdit()">やめる</button>
       <button class="primary" id="edSaveBtn" onclick="saveEdit()">この内容で直す</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 明細の否認 ===== -->
+<div class="editbg" id="denyBg" onclick="if(event.target===this)closeDeny()">
+  <div class="editbox">
+    <h3>この給油を否認する</h3>
+    <p class="ed-sub" id="dnSub"></p>
+    <div class="ed-grid">
+      <label class="wide">否認する理由<input type="text" id="dn-reason" placeholder="例：同じ領収書が2回あがっているため"></label>
+      <label class="wide">否認した人<input type="text" id="dn-by" placeholder="お名前"></label>
+    </div>
+    <p class="ed-warn">
+      否認したものは<b>一覧から見えなくなり、合計にも入りません</b>。記録は残るので、
+      「否認したものも表示」で見返せます。押し間違えたら「↩ 取消」で戻せます。
+    </p>
+    <p class="ed-note" id="dnNote"></p>
+    <div class="ed-btns">
+      <button class="ghost" onclick="closeDeny()">やめる</button>
+      <button class="primary" id="dnSaveBtn" onclick="saveDeny()">否認する</button>
     </div>
   </div>
 </div>
@@ -833,22 +871,34 @@ function acctFillMonths(){
 function acctRender(){
   const mk=s("acct-month").value;
   const ck=s("acct-chk").value;
+  const showDeny = !!(s("showDeny") && s("showDeny").checked);
   let list=mk?acctRows.filter(r=>r.mk===mk):acctRows.slice();
   if(ck==="ok")   list=list.filter(r=>r.checked);
   if(ck==="wait") list=list.filter(r=>!r.checked);
-  const total=list.reduce((a,r)=>a+(r.amount||0),0);
-  const litersum=list.reduce((a,r)=>a+(r.liter||0),0);
-  const waitn=list.filter(r=>!r.checked).length;
+
+  /* 否認したものは「認めなかったもの」なので、合計にもスタッフ別にも入れない。
+     既定では一覧からも隠し、何件隠しているかを必ず知らせる。 */
+  const hid = list.filter(r=>r.denied).length;
+  if(!showDeny) list = list.filter(r=>!r.denied);
+  const hn = s("hidNote");
+  if(hn){
+    if(hid && !showDeny){ hn.style.display=""; hn.textContent="否認したもの "+hid+"件を隠しています（「否認したものも表示」で出せます）"; }
+    else{ hn.style.display="none"; hn.textContent=""; }
+  }
+  const live = list.filter(r=>!r.denied);   // 集計は否認ぬきで
+  const total=live.reduce((a,r)=>a+(r.amount||0),0);
+  const litersum=live.reduce((a,r)=>a+(r.liter||0),0);
+  const waitn=live.filter(r=>!r.checked).length;
   s("kpis").innerHTML=[
     ["給油額 合計", yen(total)],
     ["給油量 合計", (Math.round(litersum*10)/10)+"L"],
-    ["件数", list.length+"件"],
+    ["件数", live.length+"件"],
     ["未確認", waitn+"件"]
   ].map(([l,v])=>`<div class="kpi"><div class="lbl">${l}</div><div class="val">${v}</div></div>`).join("");
   // スタッフ別
   /* 集計は空白なしキーで合算し、表示は「姓 名」に寄せた名前を使う */
   const map={};
-  list.forEach(r=>{
+  live.forEach(r=>{
     const k=r.driverKey||nameKey(r.driver);
     const c=k?(r.driver||nameClean(r.driver)):"未記入";
     map[c]=(map[c]||0)+r.amount;
@@ -862,14 +912,25 @@ function acctRender(){
 function acctList(list){
   if(!list.length){ s("listWrap").innerHTML='<div class="empty">明細がありません</div>'; return; }
   const sorted=list.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  let h='<table><thead><tr><th>給油日</th><th>名前</th><th class="num">給油量</th><th class="num">金額</th><th>給油所</th><th>領収書</th><th>状態</th><th>確認</th></tr></thead><tbody>';
+  let h='<table><thead><tr><th>給油日</th><th>名前</th><th class="num">給油量</th><th class="num">金額</th><th>給油所</th><th>領収書</th><th>状態</th><th>確認</th><th>操作</th></tr></thead><tbody>';
   sorted.forEach(r=>{
     const on=!!r.checked;
-    const badge=on?'<span class="badge ok">確認済</span>':'<span class="badge wait">未確認</span>';
+    const den=!!r.denied;
+    const badge=den?'<span class="badge deny">否認</span>'
+                 :(on?'<span class="badge ok">確認済</span>':'<span class="badge wait">未確認</span>');
     const btn=`<button class="chkbtn${on?" done":""}" onclick="toggleCheck('${esc(r.id||"")}',${on?"false":"true"},this)">${on?"✓ 取消":"確認する"}</button>`;
-    const canEdit = !!r.id;
+    /* 否認したものは修正させない（先に否認を取り消してもらう）。
+       押し間違いに備えて、否認の取消と消去はいつでも押せるようにする。 */
+    const canEdit = !!r.id && !den;
     const rowClick = canEdit ? ` onclick="if(event.target.tagName!=='BUTTON'&&event.target.tagName!=='A')openEdit('${esc(r.id)}')" style="cursor:pointer" title="押すと修正できます"` : "";
-    h+=`<tr${rowClick}${(r.edits&&r.edits.length)?' class="edited"':''}><td>${esc((r.date||"").toString().slice(0,10))}</td><td>${esc(r.driver)||'—'}</td><td class="num">${(Number(r.liter)||0)}L</td><td class="num">${yen(r.amount)}</td><td>${esc(r.station)||'—'}${(r.edits&&r.edits.length)?`<span class="edtag">修正${r.edits.length}</span>`:''}</td><td>${r.url?`<a class="rlink" href="${r.url}" target="_blank" rel="noopener">📷</a>`:'—'}</td><td>${badge}</td><td>${r.id?btn:'—'}</td></tr>`;
+    const dnb = r.id ? (den
+      ? `<button class="dnbtn" onclick="undoDeny('${esc(r.id)}',this)">↩ 取消</button>`
+      : `<button class="dnbtn" onclick="openDeny('${esc(r.id)}')">🚫 否認</button>`) : "";
+    const erb = r.id ? `<button class="erbtn" onclick="eraseGas('${esc(r.id)}',this)">🗑 消去</button>` : "";
+    const why = den && r.deniedWhy
+      ? `<span class="dwhy">否認：${esc(r.deniedWhy)}${r.deniedBy?`（${esc(r.deniedBy)}${r.deniedAt?" "+esc(r.deniedAt):""}）`:""}</span>` : "";
+    const cls = [den?"denied":"", (r.edits&&r.edits.length)?"edited":""].filter(Boolean).join(" ");
+    h+=`<tr${rowClick}${cls?` class="${cls}"`:''}><td>${esc((r.date||"").toString().slice(0,10))}</td><td>${esc(r.driver)||'—'}</td><td class="num">${(Number(r.liter)||0)}L</td><td class="num">${yen(r.amount)}</td><td>${esc(r.station)||'—'}${(r.edits&&r.edits.length)?`<span class="edtag">修正${r.edits.length}</span>`:''}${why}</td><td>${r.url?`<a class="rlink" href="${r.url}" target="_blank" rel="noopener">📷</a>`:'—'}</td><td>${badge}</td><td>${r.id?btn:'—'}</td><td>${dnb}${erb}</td></tr>`;
   });
   s("listWrap").innerHTML=h+"</tbody></table>";
 }
@@ -897,9 +958,9 @@ function exportCSV(){
   if(ck==="ok")   list=list.filter(r=>r.checked);
   if(ck==="wait") list=list.filter(r=>!r.checked);
   list=list.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  const head=["給油日","名前","給油量(L)","金額","給油所","領収書リンク","確認状態","確認者","確認日時"];
+  const head=["給油日","名前","給油量(L)","金額","給油所","領収書リンク","確認状態","確認者","確認日時","否認","否認理由","否認者"];
   const q=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
-  const csv="\uFEFF"+head.join(",")+"\n"+list.map(r=>[(r.date||"").toString().slice(0,10),r.driver,r.liter,r.amount,r.station,r.url,(r.checked?"確認済":"未確認"),r.checkedBy||"",r.checkedAt||""].map(q).join(",")).join("\n");
+  const csv="\uFEFF"+head.join(",")+"\n"+list.map(r=>[(r.date||"").toString().slice(0,10),r.driver,r.liter,r.amount,r.station,r.url,(r.checked?"確認済":"未確認"),r.checkedBy||"",r.checkedAt||"",(r.denied?"否認":""),r.deniedWhy||"",r.deniedBy||""].map(q).join(",")).join("\n");
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download="給油明細"+(mk?"_"+mk:"")+".csv"; a.click();
 }
 
@@ -997,6 +1058,98 @@ async function saveEdit(){
   }catch(e){
     s("edNote").textContent = "保存できませんでした："+String(e.message||e);
   }finally{ btn.disabled=false; }
+}
+
+
+/* ===================================================================
+ *  否認と消去（2026-09-01）
+ *
+ *   否認 … 「この申請は認めない」という印。理由は必須。
+ *          一覧からは既定で隠れ、合計にも入らない。記録は残る。
+ *   消去 … 二重にあがった行を一覧から消す。
+ *          スプレッドシートの行は消さず「削除」の印を付けるだけなので、
+ *          間違えて消しても、シートのR列（削除）の1を消せば戻る。
+ * =================================================================== */
+let denyTarget = null;
+
+function whoAmI(){
+  var n = window._loginName || "";
+  if(!n){ try{ n = localStorage.getItem(LASTUSER)||""; }catch(e){} }
+  return String(n||"").trim();
+}
+
+function openDeny(id){
+  const r = acctRows.find(x=>String(x.id)===String(id));
+  if(!r) return;
+  denyTarget = r;
+  s("dnSub").textContent = `${(r.date||"").toString().slice(0,10)}　${r.driver||"名前なし"}　${yen(r.amount)}`;
+  s("dn-reason").value = "";
+  s("dn-by").value = whoAmI();
+  s("dnNote").textContent = "";
+  s("denyBg").classList.add("show");
+}
+function closeDeny(){ s("denyBg").classList.remove("show"); denyTarget=null; }
+
+async function saveDeny(){
+  if(!denyTarget) return;
+  const r = denyTarget;
+  const reason = (s("dn-reason").value||"").trim();
+  const by     = (s("dn-by").value||"").trim();
+  if(!reason){ s("dnNote").textContent="否認する理由を入れてください（あとで見返すためです）。"; return; }
+  if(!by){     s("dnNote").textContent="否認した人のお名前を入れてください。"; return; }
+
+  const btn=s("dnSaveBtn"); btn.disabled=true; s("dnNote").textContent="保存しています…";
+  try{
+    const res = await gasPost({ action:"denyRow", id:r.id, reason:reason, by:by });
+    if(!res || !res.ok) throw new Error((res&&res.error)||"保存できませんでした");
+    /* 一覧を読み直さず、その1件だけ手元で書き換えて描き直す（通信は1往復） */
+    r.denied = true; r.deniedWhy = reason; r.deniedBy = by; r.deniedAt = res.at || "";
+    closeDeny();
+    acctRender();
+    const st=s("acct-status"); if(st){ st.className="acct-status"; st.textContent="否認しました（全"+acctRows.length+"件）"; }
+  }catch(e){
+    s("dnNote").textContent = "保存できませんでした："+String(e.message||e);
+  }finally{ btn.disabled=false; }
+}
+
+async function undoDeny(id, btn){
+  const r = acctRows.find(x=>String(x.id)===String(id));
+  if(!r) return;
+  if(!confirm("否認を取り消して、元に戻しますか？")) return;
+  if(btn) btn.classList.add("busy");
+  try{
+    const res = await gasPost({ action:"denyUndo", id:id, by:whoAmI() });
+    if(!res || !res.ok) throw new Error((res&&res.error)||"戻せませんでした");
+    r.denied=false; r.deniedWhy=""; r.deniedBy=""; r.deniedAt="";
+    acctRender();
+  }catch(e){
+    if(btn) btn.classList.remove("busy");
+    const st=s("acct-status"); if(st){ st.className="acct-status err"; st.textContent="エラー："+String(e.message||e); }
+  }
+}
+
+async function eraseGas(id, btn){
+  const r = acctRows.find(x=>String(x.id)===String(id));
+  if(!r) return;
+  const msg = `${(r.date||"").toString().slice(0,10)}　${r.driver||"名前なし"}　${yen(r.amount)}\n\n`
+    + "この給油を一覧から消します。\n"
+    + "（スプレッドシートの行は残ります。戻すときはシートの「削除」欄の 1 を消してください）\n\n"
+    + "よろしいですか？";
+  if(!confirm(msg)) return;
+  const by = whoAmI() || (prompt("消した人のお名前")||"").trim();
+  if(!by) return;
+  if(btn) btn.classList.add("busy");
+  try{
+    const res = await gasPost({ action:"eraseRow", id:id, by:by, reason:(r.denied?(r.deniedWhy||""):"") });
+    if(!res || !res.ok) throw new Error((res&&res.error)||"消せませんでした");
+    acctRows = acctRows.filter(x=>String(x.id)!==String(id));
+    acctFillMonths();
+    acctRender();
+    const st=s("acct-status"); if(st){ st.className="acct-status"; st.textContent="消しました（全"+acctRows.length+"件）"; }
+  }catch(e){
+    if(btn) btn.classList.remove("busy");
+    const st=s("acct-status"); if(st){ st.className="acct-status err"; st.textContent="エラー："+String(e.message||e); }
+  }
 }
 
 
